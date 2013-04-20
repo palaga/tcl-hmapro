@@ -1,0 +1,232 @@
+#! /usr/bin/env tclsh
+#
+#
+# usage hmapro [-p tcp|udp] [-o] [-c <filename>] [-g] [-l] [-t <template>] [<servername>]
+# i -l   list
+# i -u   update template and server list
+# i -v   print version
+# n -g   gui
+# n -c   config
+# n -t   template
+# i -p   protocol: tcp or udp
+# n -o   output pipe: will send config through namedpipe instead of intermediate
+#
+# i = switch implemented
+# n = not implemented
+#
+
+namespace eval ::hmapro {
+  variable    version 0.1
+  variable    config  [
+    dict create                                                                      \
+      configfile   "hma-vpn.conf"                                                    \
+      serversfile  "servers.txt"                                                     \
+      templatefile "template.ovpn"                                                   \
+      outputfile   "hma.ovpn"                                                        \
+      serversurl   "https://securenetconnection.com/vpnconfig/servers-cli.php"       \
+      templateurl  "https://securenetconnection.com/vpnconfig/openvpn-template.ovpn" \
+      vpncmd       "sudo openvpn --script-security 3 --verb 2 --config "
+  ]
+
+
+  proc connect {server {proto tcp}} {
+    hmapro::load_ovpn_file $server $proto
+    exec {*}[hmapro::getcfg vpncmd] [hmapro::getcfg outputfile] >@ stdout
+  }
+
+
+  proc getcfg {key} {
+    variable config
+    return [dict get $config $key]
+  }
+
+
+  proc load_config {cfile} {
+    variable config
+    if {$cfile == ""} {set cfile [hmapro::getcfg configfile]}
+    # Stop if file doesn't exist
+    if {![file exists $cfile]} return
+    set   f     [open $cfile r]
+    proc  rng   {s a b} {string range $s $a $b}
+    proc  trm   {s}     {string trim  $s}
+
+    while {[gets $f line] >= 0} {
+      # Skip empty lines
+      if {$line == ""} continue
+      # Trim line
+      set line [string trim $line]
+      # Skip comments
+      if {[string match {#*} $line]} continue
+
+      set idx [string first = $line]
+      dict set config \
+        [trm [rng $line 0 [expr $idx-1]]] \
+        [trm [rng $line [expr $idx+1] end]]
+    }
+
+    close $f
+  }
+
+
+  proc get_list {regex} {
+    set serversfile [getcfg serversfile]
+    if {![file exists $serversfile]} hmapro::update_list
+
+    set f          [open $serversfile r]
+    set servers    [regexp -line -all -inline $regex [read $f]]
+    set serverlist [list]
+    close $f
+
+    # Return a list of servers, each server contains fields,
+    # separated by a |, these fields are split as well:
+    foreach x $servers {
+      lappend serverlist [split $x |]
+    }
+
+    return $serverlist
+  }
+
+
+  proc simple_list {part} { return [hmapro::get_list ".*$part.*"] }
+
+
+  proc update_list {} {
+    hmapro::updatefile [hmapro::getcfg serversfile] [hmapro::getcfg serversurl]
+  }
+
+
+  # Expects one line from servers.txt, split on |
+  proc load_ovpn_file {server {proto tcp}} {
+    set templatefile [hmapro::getcfg templatefile]
+    set outputfile   [hmapro::getcfg outputfile]
+    if {![file exists $templatefile]} hmapro::update_template
+    file copy -force $templatefile $outputfile
+
+    # default tcp port
+    set ip   [lindex $server 0]
+    set port [select_port $proto]
+    set f    [open $outputfile a]
+
+    puts $f "remote $ip $port"
+    puts $f "proto $proto"
+
+    close $f
+  }
+
+
+  proc select_port {proto} {
+    if {$proto == "udp"} {
+      return 53
+    } elseif {$proto == "tcp"} {
+      return 443
+    } else {
+      error "protocol name is not valid"
+    }
+  }
+
+
+  proc update_template {} {
+    hmapro::updatefile [hmapro::getcfg templatefile] [hmapro::getcfg templateurl]
+  }
+
+  # TODO: use tcl httplib instead of curl
+  proc updatefile {outfile url} {
+    exec curl -s $url > $outfile
+  }
+}
+
+
+
+proc parseArgs {args result} {
+  set len        [llength $args]
+  set servername ""
+  for {set i 0} {$i < $len} {incr i} {
+    switch [lindex $args $i] {
+      "-l"    {dict set result list       1}
+      "-h"    {dict set result help       1}
+      "-p"    {dict set result proto      [lindex $args [incr i]]}
+      "-c"    {dict set result configfile [lindex $args [incr i]]}
+      "-v"    {dict set result version    1}
+      "-u"    {dict set result update     1}
+      default {     set        servername [join "$servername [lindex $args $i]"]}
+    }
+  }
+
+  dict set result servername $servername
+
+  return $result
+}
+
+
+proc updateall {} {
+  puts "Updating server list..."
+  hmapro::update_list
+  puts "Updating template..."
+  hmapro::update_template
+  puts "Done!"
+}
+
+
+proc listall {servername serverlist} {
+  puts "Scanning server list for pattern \"$servername\":"
+  foreach x $serverlist {
+    puts [format "%15s   %s" [lindex $x 0] [lindex $x 1]]
+  }
+}
+
+
+proc help {} {
+  puts {usage: hmapro [-h] [-v] [-u] [-c <cfgfile>] [-p <proto>] [-l] <servername>}
+  puts "  -p <proto>    Protocol, either tcp (default) or udp."
+  puts "  -c <cfgfile>  Config file to load."
+  puts "  -l            List servers matchin <servername>."
+  puts "  -h            Show this help message."
+  puts "  -v            Print version."
+  puts "  -u            Update both openvpn template and the server list."
+}
+
+
+if {$argc > 0} {
+  set defaults [
+    dict create list         0   \
+                help         0   \
+                version      0   \
+                update       0   \
+                proto        tcp \
+                servername   ""  \
+                configfile   ""
+  ]
+  set args [parseArgs $argv $defaults]
+
+  dict with args {
+    if {$version} {
+      puts $hmapro::version
+      exit 0
+    } elseif {$help} {
+      help
+      exit 0
+    }
+
+    hmapro::load_config $configfile
+
+    if {$update} {
+      updateall
+    } else {
+      set serverlist [hmapro::simple_list $servername]
+
+      if {[llength $serverlist] > 0} {
+        if {$list} {
+          listall $servername $serverlist
+        } else {
+          set server [lindex $serverlist 0]
+          puts "Connecting to \"[lindex $server 1]\"..."
+          hmapro::connect $server $proto
+        }
+      } else {
+        puts "No servers matching pattern \"$servername\""
+        exit 1
+      }
+    }
+  }
+} else help
+
