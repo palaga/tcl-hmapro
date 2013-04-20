@@ -19,9 +19,16 @@ with a #. A few examples of usage:
     $ hmapro -c example.cfg Neth # Use configuration file _example.cfg_
 ```
 
+
 Features
 --------
 - Connect to a server.
 - List servers based on a regular expression.
 - Support for configuration files.
+
+
+TODO
+----
+- Enhanced configuration with formatable _vpncmd_ line.
+- Add a simple TK gui.
 
