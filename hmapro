@@ -31,7 +31,16 @@ namespace eval ::hmapro {
 
   proc connect {server {proto tcp}} {
     hmapro::load_ovpn_file $server $proto
-    exec {*}[hmapro::getcfg vpncmd] [hmapro::getcfg outputfile] >@ stdout
+    set err [
+      catch {
+        exec {*}[hmapro::getcfg vpncmd] [hmapro::getcfg outputfile] >@ stdout
+      }
+    ]
+
+    if {$err} {
+      puts "Error while executing openvpn!"
+      exit 1
+    }
   }
 
 
