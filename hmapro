@@ -19,10 +19,10 @@ namespace eval ::hmapro {
   variable    version 0.1
   variable    config  [
     dict create                                                                      \
-      configfile   "hma-vpn.conf"                                                    \
-      serversfile  "servers.txt"                                                     \
-      templatefile "template.ovpn"                                                   \
-      outputfile   "hma.ovpn"                                                        \
+      configfile   "/tmp/hma-vpn.conf"                                               \
+      serversfile  "/tmp/servers.txt"                                                \
+      templatefile "/tmp/template.ovpn"                                              \
+      outputfile   "/tmp/hma.ovpn"                                                   \
       serversurl   "https://securenetconnection.com/vpnconfig/servers-cli.php"       \
       templateurl  "https://securenetconnection.com/vpnconfig/openvpn-template.ovpn" \
       vpncmd       "sudo openvpn --script-security 3 --verb 2 --config "
