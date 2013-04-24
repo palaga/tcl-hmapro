@@ -25,17 +25,20 @@ namespace eval ::hmapro {
       outputfile   "/tmp/hma.ovpn"                                                   \
       serversurl   "https://securenetconnection.com/vpnconfig/servers-cli.php"       \
       templateurl  "https://securenetconnection.com/vpnconfig/openvpn-template.ovpn" \
-      vpncmd       "sudo openvpn --script-security 3 --verb 2 --config "
+      outstream    "stdout"                                                          \
+      authcmd      "sudo %c"                                                         \
+      vpncmd       "openvpn --script-security 3 --verb 2 --config %c"                \
+      fetchcmd     "curl -s %u -o %f"
   ]
 
 
   proc connect {server {proto tcp}} {
     hmapro::load_ovpn_file $server $proto
-    set err [
-      catch {
-        exec {*}[hmapro::getcfg vpncmd] [hmapro::getcfg outputfile] >@ stdout
-      }
-    ]
+    set vpncmd [hmapro::format [hmapro::getcfg authcmd] "%c {[hmapro::getcfg vpncmd]}"]
+    puts $vpncmd
+    set vpncmd [hmapro::format $vpncmd "%c {[hmapro::getcfg outputfile]}"]
+    puts $vpncmd
+    set err [ catch { exec {*}$vpncmd >@ [hmapro::getcfg outstream]} ]
 
     if {$err} {
       puts "Error while executing openvpn!"
@@ -138,9 +141,32 @@ namespace eval ::hmapro {
     hmapro::updatefile [hmapro::getcfg templatefile] [hmapro::getcfg templateurl]
   }
 
-  # TODO: use tcl httplib instead of curl
+
   proc updatefile {outfile url} {
-    exec curl -s $url > $outfile
+    exec {*}[hmapro::format [hmapro::getcfg fetchcmd] "%u $url %f $outfile"]
+  }
+
+
+  proc format {s lookup} {
+    dict set lookup %% %
+
+    set i 0
+    while true {
+      set i [string first % $s $i]
+      if {$i < 0} break
+
+      set j   [expr $i+1]
+      set key "%[string index $s $j]"
+      if {[dict exists $lookup $key]} {
+        set val [dict get $lookup $key]
+        set s   [string replace $s $i $j $val]
+        set i   [expr $i+[string length $val]]
+      } else {
+        error "Pattern \"$key\" not found in the lookup table!"
+      }
+    }
+
+    return $s
   }
 }
 
