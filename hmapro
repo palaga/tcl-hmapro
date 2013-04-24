@@ -19,7 +19,7 @@ namespace eval ::hmapro {
   variable    version 0.1
   variable    config  [
     dict create                                                                      \
-      configfile   "/tmp/hma-vpn.conf"                                               \
+      configfile   [file join $env(HOME) .hmaprorc]                                  \
       serversfile  "/tmp/servers.txt"                                                \
       templatefile "/tmp/template.ovpn"                                              \
       outputfile   "/tmp/hma.ovpn"                                                   \
