@@ -16,7 +16,7 @@
 #
 
 namespace eval ::hmapro {
-  variable    version 0.1
+  variable    version 0.2
   variable    config  [
     dict create                                                                      \
       configfile   [file join $env(HOME) .hmaprorc]                                  \
@@ -133,7 +133,13 @@ namespace eval ::hmapro {
 
 
   proc updatefile {outfile url} {
-    exec {*}[hmapro::format [hmapro::getcfg fetchcmd] "%u $url %f $outfile"]
+    set fetchcmd [hmapro::format [hmapro::getcfg fetchcmd] "%u $url %f $outfile"]
+    set err [ catch { exec -ignorestderr {*}$fetchcmd } msg]
+    if {$err} {
+      puts "Error while fetching data."
+      puts $msg
+      exit 1
+    }
   }
 
 
