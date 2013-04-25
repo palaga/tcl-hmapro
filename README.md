@@ -7,8 +7,8 @@ This script can be used as a replacement for the hma-vpn.sh script. This script
 is still in an early stage of development. For a short help message, run it with
 either no arguments or -h.
 
-Configuration is pretty simple, with a _key_ = _value_ format. Comments start
-with a #. A few examples of usage:
+Configuration uses a safe tcl interpreter, with one added command: setcfg key
+value. See the example.cfg file for some examples. A few examples of usage:
 
  ```sh
     $ hmapro -v                  # Show version
@@ -29,6 +29,5 @@ Features
 
 TODO
 ----
-- Enhanced configuration with formatable _vpncmd_ line.
 - Add a simple TK gui.
 
