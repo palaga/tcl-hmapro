@@ -6,7 +6,7 @@
 # i -u   update template and server list
 # i -v   print version
 # n -g   gui
-# n -c   config
+# i -c   config
 # n -t   template
 # i -p   protocol: tcp or udp
 # n -o   output pipe: will send config through namedpipe instead of intermediate
@@ -27,7 +27,7 @@ namespace eval ::hmapro {
       templateurl  "https://securenetconnection.com/vpnconfig/openvpn-template.ovpn" \
       outstream    "stdout"                                                          \
       authcmd      "sudo %c"                                                         \
-      vpncmd       "openvpn --script-security 3 --verb 2 --config %c"                \
+      vpncmd       "openvpn --script-security 3 --verb 2 --config %c >@ %o"          \
       fetchcmd     "curl -s %u -o %f"
   ]
 
@@ -35,13 +35,11 @@ namespace eval ::hmapro {
   proc connect {server {proto tcp}} {
     hmapro::load_ovpn_file $server $proto
     set vpncmd [hmapro::format [hmapro::getcfg authcmd] "%c {[hmapro::getcfg vpncmd]}"]
-    puts $vpncmd
-    set vpncmd [hmapro::format $vpncmd "%c {[hmapro::getcfg outputfile]}"]
-    puts $vpncmd
-    set err [ catch { exec {*}$vpncmd >@ [hmapro::getcfg outstream]} ]
+    set vpncmd [hmapro::format $vpncmd "%c {[hmapro::getcfg outputfile]} %o {[hmapro::getcfg outstream]}"]
+    set err [ catch { exec {*}$vpncmd } ]
 
     if {$err} {
-      puts "Error while executing openvpn!"
+      puts stderr "Error while executing openvpn!"
       exit 1
     }
   }
@@ -53,30 +51,22 @@ namespace eval ::hmapro {
   }
 
 
-  proc load_config {cfile} {
+  proc setcfg {key value} {
     variable config
-    if {$cfile == ""} {set cfile [hmapro::getcfg configfile]}
-    # Stop if file doesn't exist
-    if {![file exists $cfile]} return
-    set   f     [open $cfile r]
-    proc  rng   {s a b} {string range $s $a $b}
-    proc  trm   {s}     {string trim  $s}
+    dict set config $key $value
+  }
 
-    while {[gets $f line] >= 0} {
-      # Skip empty lines
-      if {$line == ""} continue
-      # Trim line
-      set line [string trim $line]
-      # Skip comments
-      if {[string match {#*} $line]} continue
 
-      set idx [string first = $line]
-      dict set config \
-        [trm [rng $line 0 [expr $idx-1]]] \
-        [trm [rng $line [expr $idx+1] end]]
+  proc load_config {cfile} {
+    if {[file exists $cfile]} {
+      interp create -safe slave
+      slave alias setcfg hmapro::setcfg
+      interp share {} stdout slave
+      slave invokehidden source $cfile
+      interp delete slave
+    } else {
+      puts stderr "Config file \"$cfile\" not found"
     }
-
-    close $f
   }
 
 
@@ -229,7 +219,7 @@ if {$argc > 0} {
                 update       0   \
                 proto        tcp \
                 servername   ""  \
-                configfile   ""
+                configfile   "[hmapro::getcfg configfile]"
   ]
   set args [parseArgs $argv $defaults]
 
